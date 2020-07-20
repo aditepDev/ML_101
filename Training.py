@@ -12,8 +12,25 @@ from tensorflow.keras.layers import Dense
 import pandas as pd
 from sklearn.model_selection import train_test_split
 import os
+import requests
+import io
 
-def readData():
+def readDataURL():
+
+    url = 'https://raw.githubusercontent.com/topkoka/transform_101/master/datas.csv'
+    r = requests.get(url)
+    if r.ok:
+        data = r.content.decode('utf8')
+        df = pd.read_csv(io.StringIO(data))
+        df.info()
+        z = pd.DataFrame(df, columns=['produce']).astype('int')
+        x = pd.DataFrame(df,
+                         columns=['water', 'disaster', 'suitability', 'plant_maintenance',
+                                  'plant_sale_price']).to_numpy()
+    return x, z
+
+
+def readDataCSV():
     # ที่อยู่ไฟล์ข้อมูล
     script_dir = os.path.dirname(__file__)
     READFILE = script_dir + "/datas.csv"
@@ -24,7 +41,8 @@ def readData():
     z = pd.DataFrame(data, columns=['produce']).astype('int')
     x = pd.DataFrame(data,
                      columns=['water', 'disaster', 'suitability', 'plant_maintenance', 'plant_sale_price']).to_numpy()
-    return  x,z
+    return x, z
+
 
 def nn_model(X):
     # สร้าง model
@@ -74,7 +92,8 @@ def plotGLoss(hist):
 if __name__ == '__main__':
 
     # โหลดข้อมูล และ ตรวจสอบข้อมูล
-    x,z = readData()
+    x, z = readDataURL()
+    # x, z = readDataCSV()
 
     # โหลด model
     model = nn_model(x)

@@ -10,10 +10,15 @@ import matplotlib.pyplot as plt
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 import pandas as pd
+import numpy as np
+
 from sklearn.model_selection import train_test_split
 import os
 import requests
 import io
+import uuid
+import sys
+np.set_printoptions(threshold=sys.maxsize)
 
 def readDataURL():
 
@@ -44,31 +49,75 @@ def readDataCSV():
     return x, z
 
 
-def nn_model(X):
-    # สร้าง model
+
+# model Dl
+def nn_model(X, kernelInitializer, biasinitializer, activations):
     NN_model = Sequential()
     NN_model.add(
-        Dense(128, kernel_initializer='lecun_normal', bias_initializer='Zeros', input_dim=X.shape[1],
-              activation='relu'))
+        Dense(128, kernel_initializer=kernelInitializer, bias_initializer=biasinitializer, input_dim=X.shape[1],
+              activation=activations))
     for hidden in range(X.shape[1]):
         NN_model.add(Dense(256, kernel_initializer='normal', activation='relu'))
     NN_model.add(Dense(1, kernel_initializer='normal', activation='linear'))
     NN_model.compile(loss='mean_absolute_error', optimizer='adam',
-                     metrics=['RootMeanSquaredError'])
+                     metrics=['RootMeanSquaredError','mean_absolute_error'])
     NN_model.summary()
     return NN_model
 
 
+def create_model(X):
+    # ปรับ น้ำหนัก
+    # kernelInitializers = ['RandomNormal', 'RandomUniform', 'TruncatedNormal',
+    #                       'VarianceScaling', 'lecun_uniform', 'glorot_normal',
+    #                       'glorot_uniform', 'he_normal', 'lecun_normal', 'he_uniform']
 
-def TrainingModel_tf(X,z,model):
-    # แบ่งข้อมูล
-    X_train, X_test, z_train, z_test = train_test_split(X, z, test_size=0.2)
+    kernelInitializers = ['RandomNormal']
+                          
+    # ปรับ Bias
+    biasinitializers = ['Zeros']
+    # ปรับ activations เริ่มต้น
+    activations = ['relu']
 
+    # add model
+    model_list = []
+    for kernelInitializer in kernelInitializers:
+        for biasinitializer in biasinitializers:
+            for activation in activations:
+                print(kernelInitializer, activation)
+                model = nn_model(X, kernelInitializer, biasinitializer, activation)
+                model_list.append([str(uuid.uuid4()), model, 'DL :( weights ' + kernelInitializer + ' : bias ' + biasinitializer + ' : activation ' + activation + ')'])
+
+    # เตรียม dict เก็บข้อมูล Model
+    accuracy: dict = {}
+    model: dict = {}
+    Namemodel: dict = {}
+    for i in range(len(model_list)):
+        accuracy[str(model_list[i][0])] = 'NULL'
+        model[model_list[i][0]] = None
+        Namemodel[model_list[i][0]] = model_list[i][2]
+    return model_list, accuracy, model, Namemodel
+
+
+
+
+def TrainingModel_tf(X_train,z_train,X_test,z_test,model):
+    
     # สอน
-    hist = model.fit(X_train, z_train.ravel(), epochs=300,initial_epoch=0 ,batch_size=32, validation_split=0.2, verbose= 1  , workers = 0,
+    hist = model.fit(X_train, z_train.ravel(), epochs=30,initial_epoch=0 ,batch_size=128, validation_split=0.2, verbose= 1  , workers = 0,
                      validation_data=(X_test, z_test))
+    print('\nhistory dict:', hist.history)
+    results = model.evaluate(X_test, z_test, batch_size=128)
+    MAE_Loss = np.array(hist.history['loss'][50:]) - np.array(hist.history['val_loss'][50:])
 
-    return hist
+    answer = model.predict(X_test, verbose=0, use_multiprocessing=True, workers=0)
+    # answer_test = np.array(answer)*100/ np.array(z_test)
+    answer_test = pd.DataFrame([answer.reshape(1,-1)[0],z_test, np.abs(answer.reshape(1, -1)[0] - z_test)/z_test]).T
+    answer_test.rename(columns={0: 'answer', 1: 'predict', 2: 'mape'},
+            inplace=True)
+    mape = answer_test['mape'].mean()*100
+    answer_test.to_csv("values.csv")
+    print("Mean absolute percentage error" ,mape)
+    return [results[1],float(np.abs(sum(MAE_Loss)))],mape,hist
 
 def dump_model_tf(fileName, model,PathFiles):
     # save model
@@ -96,13 +145,19 @@ if __name__ == '__main__':
     # x, z = readDataCSV()
 
     # โหลด model
-    model = nn_model(x)
-
+    model_list, accuracy, model, Namemodel = create_model(x)
+    classifiers = model_list
+    #print(model)
     # เรียนรู้
-    hist = TrainingModel_tf(x,z.values.ravel(),model)
 
-    # ตรวจสอบ model
-    plotGLoss(hist)
+    # แบ่งข้อมูล
+    X_train, X_test, z_train, z_test = train_test_split(x, z.values.ravel(), test_size=0.2)
+    
+    # สอน
+    for name, model,_ in classifiers:
+      results,accuracy_mean,hist = TrainingModel_tf(X_train,z_train,X_test,z_test,model)
+      # ตรวจสอบ model
+      plotGLoss(hist) 
 
-    # save model
+    # # save model
     dump_model_tf("produceModel", model,"")

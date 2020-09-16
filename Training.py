@@ -101,14 +101,18 @@ def create_model(X):
 
 
 def TrainingModel_tf(X_train,z_train,X_test,z_test,model):
-    
+    # กำหนด callback ถ้า loss ไม่ลดลง 15 ครั้งให้หยุด
+    my_callbacks = [
+        tf.keras.callbacks.EarlyStopping(patience=15),
+    ]
     # สอน
     hist = model.fit(X_train, z_train.ravel(), epochs=30,initial_epoch=0 ,batch_size=128, validation_split=0.2, verbose= 1  , workers = 0,
-                     validation_data=(X_test, z_test))
+                     validation_data=(X_test, z_test), callbacks=my_callbacks)
     print('\nhistory dict:', hist.history)
     results = model.evaluate(X_test, z_test, batch_size=128)
     MAE_Loss = np.array(hist.history['loss'][50:]) - np.array(hist.history['val_loss'][50:])
-
+    
+    # วัดผล mape
     answer = model.predict(X_test, verbose=0, use_multiprocessing=True, workers=0)
     # answer_test = np.array(answer)*100/ np.array(z_test)
     answer_test = pd.DataFrame([answer.reshape(1,-1)[0],z_test, np.abs(answer.reshape(1, -1)[0] - z_test)/z_test]).T
@@ -117,6 +121,7 @@ def TrainingModel_tf(X_train,z_train,X_test,z_test,model):
     mape = answer_test['mape'].mean()*100
     answer_test.to_csv("values.csv")
     print("Mean absolute percentage error" ,mape)
+    
     return [results[1],float(np.abs(sum(MAE_Loss)))],mape,hist
 
 def dump_model_tf(fileName, model,PathFiles):
